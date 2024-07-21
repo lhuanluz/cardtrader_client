@@ -1,10 +1,12 @@
 mod api;
 mod auth;
 mod blueprints;
+mod cache;
 mod expansions;
 mod prices;
 mod telegram;
 
+use crate::cache::BlueprintCache;
 use inquire::{InquireError, Select};
 use std::error::Error;
 use whoami;
@@ -14,6 +16,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
     dotenv::dotenv().ok();
     let client = reqwest::Client::builder().build()?;
     let headers = auth::get_auth_headers();
+    println!("Loading the program, please wait a moment...");
+    // Initialize the cache and load the blueprints
+    let blueprint_cache = BlueprintCache::new();
+    blueprint_cache.load_cache("all_blueprints.txt")?;
 
     let user_name = whoami::username();
     println!("Hi, {}! welcome to CardTrader.", user_name);
@@ -31,10 +37,12 @@ async fn main() -> Result<(), Box<dyn Error>> {
         ];
         let menu_ans: Result<&str, InquireError> =
             Select::new("What would you like to do?", menu_options.clone()).prompt();
-
         match menu_ans {
             Ok(choice) => match choice {
-                "Add card" => blueprints::search_and_select_blueprints(&client, &headers).await?,
+                "Add card" => {
+                    blueprints::search_and_select_blueprints(&client, &headers, &blueprint_cache)
+                        .await?
+                }
                 "Add card by expansion" => {
                     expansions::show_expansions(&client, &headers, &expansions).await?
                 }
