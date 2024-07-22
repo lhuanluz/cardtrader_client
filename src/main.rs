@@ -46,11 +46,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 "Add card by expansion" => {
                     expansions::show_expansions(&client, &headers, &expansions).await?
                 }
-                "Check my list prices" => {
-                    prices::check_prices(&client, &headers, &user_name).await?
-                }
+                "Check my list prices" => prices::check_prices(&client, &headers).await?,
                 "Continuous price check" => {
-                    prices::continuous_check_prices(&client, &headers, &user_name).await?
+                    prices::continuous_check_prices(&client, &headers).await?
                 }
                 "Update database (Danger)" => {
                     expansions::save_all_blueprints(&client, &headers, &expansions).await?

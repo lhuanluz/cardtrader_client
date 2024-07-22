@@ -20,11 +20,7 @@ pub fn save_blueprint_price(blueprint_id: u32, price_cents: u32) -> Result<(), B
     Ok(())
 }
 
-pub async fn check_prices(
-    client: &Client,
-    headers: &HeaderMap,
-    user_name: &str,
-) -> Result<(), Box<dyn Error>> {
+pub async fn check_prices(client: &Client, headers: &HeaderMap) -> Result<(), Box<dyn Error>> {
     dotenv().ok();
     let telegram_token = env::var("TELEGRAM_TOKEN").expect("TELEGRAM_TOKEN must be set");
     let telegram_chat_id: i64 = env::var("TELEGRAM_CHAT_ID")
@@ -36,6 +32,7 @@ pub async fn check_prices(
     let reader = BufReader::new(file);
 
     let mut updates = Vec::new();
+    let mut alert_messages = Vec::new();
 
     for line in reader.lines() {
         let line = line?;
@@ -67,12 +64,16 @@ pub async fn check_prices(
                     saved_price as f64 / 100.0
                 );
 
-                let chat_id = ChatId(telegram_chat_id);
                 let alert_message = format!(
-                    "Alerta de preço baixo! Queda de {} reais em: [{}] {}: Preço atual R$ {:.2} é menor que o preço salvo R$ {:.2} - Alertado por {}",
-                    ( saved_price as f64 - current_min_price as f64) / 100.0 ,blueprint_id, product_name, current_min_price as f64 / 100.0, saved_price as f64 / 100.0, user_name
+                    "*{}*\nQueda: _R$ {}_\nPreço Atual: *R$ {}*",
+                    escape_markdown(&product_name),
+                    escape_markdown(&format!(
+                        "{:.2}",
+                        (saved_price as f64 - current_min_price as f64) / 100.0
+                    )),
+                    escape_markdown(&format!("{:.2}", current_min_price as f64 / 100.0))
                 );
-                telegram::send_message(&telegram_token, chat_id, &alert_message).await?;
+                alert_messages.push(alert_message);
 
                 updates.push((blueprint_id, current_min_price));
             } else {
@@ -87,6 +88,16 @@ pub async fn check_prices(
             );
             updates.push((blueprint_id, saved_price));
         }
+    }
+
+    // Envia todas as mensagens de alerta de uma vez
+    if !alert_messages.is_empty() {
+        let chat_id = ChatId(telegram_chat_id);
+        let consolidated_message = format!(
+            "*Alerta de Preço Baixo\\!*\n\n{}",
+            alert_messages.join("\n\n")
+        );
+        telegram::send_message(&telegram_token, chat_id, &consolidated_message).await?;
     }
 
     update_prices_file(updates)?;
@@ -139,12 +150,27 @@ fn update_prices_file(updates: Vec<(u32, u32)>) -> Result<(), Box<dyn Error>> {
 pub async fn continuous_check_prices(
     client: &Client,
     headers: &HeaderMap,
-    user_name: &str,
 ) -> Result<(), Box<dyn Error>> {
     loop {
         println!("Checking prices...");
-        check_prices(client, headers, user_name).await?;
+        check_prices(client, headers).await?;
         println!("Press Ctrl+C to stop continuous price check.");
         sleep(Duration::from_secs(60)).await;
     }
+}
+
+// Função auxiliar para escapar caracteres especiais no MarkdownV2
+fn escape_markdown(text: &str) -> String {
+    let mut escaped = String::new();
+    for c in text.chars() {
+        match c {
+            '_' | '*' | '[' | ']' | '(' | ')' | '~' | '`' | '>' | '#' | '+' | '-' | '=' | '|'
+            | '{' | '}' | '.' | '!' | '\\' => {
+                escaped.push('\\');
+                escaped.push(c);
+            }
+            _ => escaped.push(c),
+        }
+    }
+    escaped
 }
