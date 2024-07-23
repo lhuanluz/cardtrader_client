@@ -174,3 +174,40 @@ fn escape_markdown(text: &str) -> String {
     }
     escaped
 }
+
+pub async fn update_local_prices(
+    client: &Client,
+    headers: &HeaderMap,
+) -> Result<(), Box<dyn Error>> {
+    println!("Updating prices...");
+    let file = OpenOptions::new().read(true).open("prices.txt")?;
+    let reader = BufReader::new(file);
+
+    let mut updates = Vec::new();
+
+    for line in reader.lines() {
+        let line = line?;
+        let parts: Vec<&str> = line.split_whitespace().collect();
+        if parts.len() != 2 {
+            continue;
+        }
+        let blueprint_id: u32 = parts[0].parse()?;
+        let _saved_price: u32 = parts[1].parse()?;
+
+        let products = fetch_products_with_retry(client, headers, blueprint_id).await?;
+
+        if !products.is_empty() {
+            let current_min_price = products[0].price_cents;
+            updates.push((blueprint_id, current_min_price));
+        } else {
+            updates.push((blueprint_id, 0)); // Add a placeholder if no product is found
+        }
+    }
+
+    // Atualiza o arquivo prices.txt com os novos valores
+    update_prices_file(updates)?;
+
+    println!("Prices updated successfully!");
+
+    Ok(())
+}

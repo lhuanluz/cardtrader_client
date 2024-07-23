@@ -3,6 +3,7 @@ mod auth;
 mod blueprints;
 mod cache;
 mod expansions;
+mod ligamagic;
 mod prices;
 mod telegram;
 
@@ -32,6 +33,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
             "Add card by expansion",
             "Check my list prices",
             "Continuous price check",
+            "Check LigaMagic prices",
+            "Update prices",
             "Update database (Danger)",
             "Exit",
         ];
@@ -50,6 +53,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 "Continuous price check" => {
                     prices::continuous_check_prices(&client, &headers).await?
                 }
+                "Check LigaMagic prices" => {
+                    ligamagic::check_ligamagic_prices(&client, &headers, &user_name).await?
+                }
+                "Update prices" => prices::update_local_prices(&client, &headers).await?,
                 "Update database (Danger)" => {
                     expansions::save_all_blueprints(&client, &headers, &expansions).await?
                 }
