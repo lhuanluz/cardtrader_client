@@ -38,15 +38,18 @@ pub async fn list_and_select_cards(cache: &BlueprintCache) -> Result<(), Box<dyn
                         if version == "Add all versions" {
                             println!("You selected to add all versions of {}:", card_name);
                             for version in &versions {
-                                let price =
-                                    fetch_card_price(&version.name, &version.expansion_name)
-                                        .await?;
+                                let price = fetch_card_price(
+                                    &version.name,
+                                    &version.expansion_name,
+                                    &version.version.as_deref().unwrap_or(""),
+                                )
+                                .await?;
                                 println!(
                                     "{} ({}) [{}] - {} - Price: R$ {:.2}",
                                     version.name,
                                     version.collector_number.as_deref().unwrap_or("N/A"),
                                     version.expansion_name,
-                                    version.version.as_deref().unwrap_or("Standard"),
+                                    version.version.as_deref().unwrap_or(""),
                                     price
                                 );
                             }
@@ -59,7 +62,7 @@ pub async fn list_and_select_cards(cache: &BlueprintCache) -> Result<(), Box<dyn
                                         v.name,
                                         v.collector_number.as_deref().unwrap_or("N/A"),
                                         v.expansion_name,
-                                        v.version.as_deref().unwrap_or("Standard")
+                                        v.version.as_deref().unwrap_or("")
                                     ) == version
                                 })
                                 .unwrap();
@@ -67,6 +70,7 @@ pub async fn list_and_select_cards(cache: &BlueprintCache) -> Result<(), Box<dyn
                             let price = fetch_card_price(
                                 &selected_version.name,
                                 &selected_version.expansion_name,
+                                &selected_version.version.as_deref().unwrap_or(""),
                             )
                             .await?;
 

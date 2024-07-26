@@ -5,6 +5,7 @@ use std::time::Duration;
 pub async fn fetch_card_price(
     card_name: &str,
     expansion_name: &str,
+    version: &str,
 ) -> Result<f64, Box<dyn Error>> {
     let clean_card_name = card_name
         .replace(' ', "-")
@@ -22,9 +23,17 @@ pub async fn fetch_card_price(
         .replace(":", "")
         .to_lowercase();
 
+    let clean_version = version
+        .replace(' ', "-")
+        .replace(",", "")
+        .replace("'", "")
+        .replace(".", "")
+        .replace(":", "")
+        .to_lowercase();
+
     let url = format!(
-        "https://www.cardtrader.com/cards/{}-{}",
-        clean_card_name, clean_expansion_name
+        "https://www.cardtrader.com/cards/{}-{}-{}",
+        clean_card_name, clean_version, clean_expansion_name
     );
 
     println!("Fetching URL: {}", url);

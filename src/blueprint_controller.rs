@@ -31,7 +31,8 @@ pub async fn save_all_blueprints_to_json(
 
     // Adiciona novos blueprints
     for expansion in expansions {
-        let blueprints = api::fetch_blueprints(client, headers.clone(), expansion.id).await?;
+        let blueprints =
+            api::fetch_blueprints(client, headers.clone(), expansion.id, &expansion.name).await?;
         for blueprint in blueprints {
             if !existing_blueprints.contains(&blueprint.id) {
                 let blueprint_data = BlueprintData {

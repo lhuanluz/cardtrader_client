@@ -18,8 +18,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let client = Client::builder().build()?;
     let headers = auth::get_auth_headers();
     println!("Loading the program, please wait a moment...");
-
     let expansions = api::fetch_expansions(&client, headers.clone()).await?;
+    println!("Expansions loaded!");
     let blueprint_cache = cache::BlueprintCache::new();
 
     // Verifica se o arquivo all_blueprints.json existe
