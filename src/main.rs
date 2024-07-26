@@ -1,5 +1,6 @@
 mod api;
 mod auth;
+mod blueprint;
 mod blueprint_controller;
 mod cache;
 mod cards_controller;

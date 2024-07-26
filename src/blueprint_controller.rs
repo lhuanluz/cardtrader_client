@@ -1,25 +1,16 @@
 use crate::api;
-use crate::api::Expansion;
+use crate::blueprint::BlueprintData;
 use indicatif::ProgressBar;
 use reqwest::{header::HeaderMap, Client};
-use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use std::error::Error;
 use std::fs::{File, OpenOptions};
-use std::io::BufReader;
-
-#[derive(Serialize, Deserialize, Clone)]
-pub struct BlueprintData {
-    pub blueprint_id: u32,
-    pub card_name: String,
-    pub collector_number: String,
-    pub expansion_name: String,
-}
+use std::io::{BufReader, BufWriter};
 
 pub async fn save_all_blueprints_to_json(
     client: &Client,
     headers: &HeaderMap,
-    expansions: &Vec<Expansion>,
+    expansions: &Vec<api::Expansion>,
 ) -> Result<(), Box<dyn Error>> {
     let mut existing_blueprints = HashSet::new();
     let mut all_blueprints: Vec<BlueprintData> = Vec::new();
@@ -46,6 +37,7 @@ pub async fn save_all_blueprints_to_json(
                 let blueprint_data = BlueprintData {
                     blueprint_id: blueprint.id,
                     card_name: blueprint.name.clone(),
+                    version: blueprint.version.clone(),
                     collector_number: blueprint
                         .collector_number
                         .clone()
@@ -67,7 +59,8 @@ pub async fn save_all_blueprints_to_json(
         .create(true)
         .truncate(true)
         .open("all_blueprints.json")?;
-    serde_json::to_writer_pretty(file, &all_blueprints)?;
+    let writer = BufWriter::new(file);
+    serde_json::to_writer_pretty(writer, &all_blueprints)?;
 
     println!("Todos os blueprints foram salvos em all_blueprints.json.");
     Ok(())

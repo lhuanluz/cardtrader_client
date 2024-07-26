@@ -18,8 +18,11 @@ pub async fn list_and_select_cards(cache: &BlueprintCache) -> Result<(), Box<dyn
                     .iter()
                     .map(|bp| {
                         format!(
-                            "{} ({}) [{}]",
-                            bp.card_name, bp.collector_number, bp.expansion_name
+                            "{} ({}) [{}] - {}",
+                            bp.name,
+                            bp.collector_number.as_deref().unwrap_or("N/A"),
+                            bp.expansion_name,
+                            bp.version.as_deref().unwrap_or("Standard")
                         )
                     })
                     .collect();
@@ -36,13 +39,14 @@ pub async fn list_and_select_cards(cache: &BlueprintCache) -> Result<(), Box<dyn
                             println!("You selected to add all versions of {}:", card_name);
                             for version in &versions {
                                 let price =
-                                    fetch_card_price(&version.card_name, &version.expansion_name)
+                                    fetch_card_price(&version.name, &version.expansion_name)
                                         .await?;
                                 println!(
-                                    "{} ({}) [{}] - Price: R$ {:.2}",
-                                    version.card_name,
-                                    version.collector_number,
+                                    "{} ({}) [{}] - {} - Price: R$ {:.2}",
+                                    version.name,
+                                    version.collector_number.as_deref().unwrap_or("N/A"),
                                     version.expansion_name,
+                                    version.version.as_deref().unwrap_or("Standard"),
                                     price
                                 );
                             }
@@ -51,14 +55,17 @@ pub async fn list_and_select_cards(cache: &BlueprintCache) -> Result<(), Box<dyn
                                 .iter()
                                 .find(|v| {
                                     format!(
-                                        "{} ({}) [{}]",
-                                        v.card_name, v.collector_number, v.expansion_name
+                                        "{} ({}) [{}] - {}",
+                                        v.name,
+                                        v.collector_number.as_deref().unwrap_or("N/A"),
+                                        v.expansion_name,
+                                        v.version.as_deref().unwrap_or("Standard")
                                     ) == version
                                 })
                                 .unwrap();
 
                             let price = fetch_card_price(
-                                &selected_version.card_name,
+                                &selected_version.name,
                                 &selected_version.expansion_name,
                             )
                             .await?;
