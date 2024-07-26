@@ -1,4 +1,5 @@
 /target
 .env
-prices.txt
-error_log.txt
+error.log
+wishlist.json
+all_blueprints.json

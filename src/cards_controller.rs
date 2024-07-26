@@ -1,5 +1,6 @@
 use crate::cache::BlueprintCache;
 use crate::cardtrader_controller::fetch_card_price;
+use crate::wishlist_controller::{add_to_wishlist, WishlistItem};
 use inquire::{InquireError, Select};
 use std::error::Error;
 
@@ -18,15 +19,11 @@ pub async fn list_and_select_cards(cache: &BlueprintCache) -> Result<(), Box<dyn
                     .iter()
                     .map(|bp| {
                         format!(
-                            "{} ({}) [{}] - {}",
-                            bp.name,
-                            bp.collector_number.as_deref().unwrap_or("N/A"),
-                            bp.expansion_name,
-                            bp.version.as_deref().unwrap_or("Standard")
+                            "{} ({}) - {}",
+                            bp.card_name, bp.collector_number, bp.expansion_name,
                         )
                     })
                     .collect();
-
                 version_descriptions.push("Add all versions".to_string());
 
                 // Usuário seleciona uma versão da carta
@@ -39,42 +36,50 @@ pub async fn list_and_select_cards(cache: &BlueprintCache) -> Result<(), Box<dyn
                             println!("You selected to add all versions of {}:", card_name);
                             for version in &versions {
                                 let price = fetch_card_price(
-                                    &version.name,
+                                    &version.card_name,
                                     &version.expansion_name,
                                     &version.version.as_deref().unwrap_or(""),
                                 )
                                 .await?;
-                                println!(
-                                    "{} ({}) [{}] - {} - Price: R$ {:.2}",
-                                    version.name,
-                                    version.collector_number.as_deref().unwrap_or("N/A"),
-                                    version.expansion_name,
-                                    version.version.as_deref().unwrap_or(""),
-                                    price
-                                );
+                                let item = WishlistItem {
+                                    card_name: version.card_name.clone(),
+                                    expansion_name: version.expansion_name.clone(),
+                                    version: version.version.as_deref().unwrap_or("").to_string(),
+                                    price,
+                                    collector_number: version.collector_number.clone(),
+                                };
+                                add_to_wishlist(item)?;
                             }
                         } else {
                             let selected_version = versions
                                 .iter()
                                 .find(|v| {
                                     format!(
-                                        "{} ({}) [{}] - {}",
-                                        v.name,
-                                        v.collector_number.as_deref().unwrap_or("N/A"),
-                                        v.expansion_name,
-                                        v.version.as_deref().unwrap_or("")
+                                        "{} ({}) - {}",
+                                        v.card_name, v.collector_number, v.expansion_name,
                                     ) == version
                                 })
                                 .unwrap();
 
                             let price = fetch_card_price(
-                                &selected_version.name,
+                                &selected_version.card_name,
                                 &selected_version.expansion_name,
-                                &selected_version.version.as_deref().unwrap_or(""),
+                                selected_version.version.as_deref().unwrap_or(""),
                             )
                             .await?;
 
-                            println!("You selected: {} - Price: R$ {:.2}", version, price);
+                            let item = WishlistItem {
+                                card_name: selected_version.card_name.clone(),
+                                expansion_name: selected_version.expansion_name.clone(),
+                                version: selected_version
+                                    .version
+                                    .as_deref()
+                                    .unwrap_or("")
+                                    .to_string(),
+                                price,
+                                collector_number: selected_version.collector_number.clone(),
+                            };
+                            add_to_wishlist(item)?;
                         }
                     }
                     Err(_) => println!("Failed to select a card version."),

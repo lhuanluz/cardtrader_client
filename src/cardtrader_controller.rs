@@ -10,7 +10,7 @@ pub async fn fetch_card_price(
     let clean_card_name = card_name
         .replace(' ', "-")
         .replace(",", "")
-        .replace("'", "")
+        .replace("'", "-")
         .replace(".", "")
         .replace(":", "")
         .to_lowercase();
@@ -18,7 +18,7 @@ pub async fn fetch_card_price(
     let clean_expansion_name = expansion_name
         .replace(' ', "-")
         .replace(",", "")
-        .replace("'", "")
+        .replace("'", "-")
         .replace(".", "")
         .replace(":", "")
         .to_lowercase();
@@ -26,17 +26,22 @@ pub async fn fetch_card_price(
     let clean_version = version
         .replace(' ', "-")
         .replace(",", "")
-        .replace("'", "")
+        .replace("'", "-")
         .replace(".", "")
         .replace(":", "")
         .to_lowercase();
 
-    let url = format!(
-        "https://www.cardtrader.com/cards/{}-{}-{}",
-        clean_card_name, clean_version, clean_expansion_name
-    );
-
-    println!("Fetching URL: {}", url);
+    let url = if version.is_empty() {
+        format!(
+            "https://www.cardtrader.com/cards/{}-{}",
+            clean_card_name, clean_expansion_name
+        )
+    } else {
+        format!(
+            "https://www.cardtrader.com/cards/{}-{}-{}",
+            clean_card_name, clean_version, clean_expansion_name
+        )
+    };
 
     let browser = Browser::new(
         LaunchOptionsBuilder::default()
@@ -56,8 +61,6 @@ pub async fn fetch_card_price(
         .replace("R$", "")
         .replace(" ", "")
         .replace(",", ".");
-
-    println!("Raw price text: {}", price_text);
 
     let price: f64 = price_text.parse().map_err(|_| "Failed to parse price")?;
     Ok(price)
