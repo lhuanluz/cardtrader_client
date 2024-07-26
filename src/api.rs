@@ -103,6 +103,7 @@ pub async fn fetch_products(
     let body = response.text().await?;
     let products_wrapper: ProductsWrapper = serde_json::from_str(&body)?;
 
+    // Extrai a lista de produtos usando o blueprint_id como chave
     let products = products_wrapper
         .products
         .values()

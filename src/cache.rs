@@ -1,13 +1,12 @@
-use crate::api::Blueprint;
-use regex::Regex;
+use crate::blueprint_controller::BlueprintData;
+use serde_json::from_reader;
 use std::collections::HashMap;
 use std::error::Error;
 use std::fs::File;
-use std::io::{BufRead, BufReader};
 use std::sync::Mutex;
 
 pub struct BlueprintCache {
-    cache: Mutex<HashMap<String, Vec<Blueprint>>>,
+    cache: Mutex<HashMap<String, Vec<BlueprintData>>>,
 }
 
 impl BlueprintCache {
@@ -17,33 +16,22 @@ impl BlueprintCache {
         }
     }
 
-    pub fn load_cache(&self, file_path: &str) -> Result<(), Box<dyn Error>> {
+    pub fn load_cache_from_json(&self, file_path: &str) -> Result<(), Box<dyn Error>> {
         let file = File::open(file_path)?;
-        let reader = BufReader::new(file);
-        let re = Regex::new(r"Blueprint ID: (\d+), Card Name: (.+), Collector Number: (.*)")?;
+        let blueprints: Vec<BlueprintData> = from_reader(file)?;
         let mut cache = self.cache.lock().unwrap();
 
-        for line in reader.lines() {
-            let line = line?;
-            if let Some(caps) = re.captures(&line) {
-                let id: u32 = caps.get(1).unwrap().as_str().parse()?;
-                let name = caps.get(2).unwrap().as_str().to_string();
-                let collector_number = caps.get(3).map_or(None, |m| Some(m.as_str().to_string()));
-
-                let blueprint = Blueprint {
-                    id,
-                    name: name.clone(),
-                    collector_number,
-                };
-
-                cache.entry(name).or_insert_with(Vec::new).push(blueprint);
-            }
+        for blueprint in blueprints {
+            cache
+                .entry(blueprint.card_name.clone())
+                .or_insert_with(Vec::new)
+                .push(blueprint);
         }
 
         Ok(())
     }
 
-    pub fn get_blueprints_by_name(&self, name: &str) -> Option<Vec<Blueprint>> {
+    pub fn get_blueprints_by_name(&self, name: &str) -> Option<Vec<BlueprintData>> {
         let cache = self.cache.lock().unwrap();
         cache.get(name).cloned()
     }
