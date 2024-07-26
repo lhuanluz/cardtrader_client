@@ -1,13 +1,8 @@
 use crate::blueprint::Blueprint;
+use crate::blueprint::BlueprintApiResponse;
+use crate::expansion::Expansion;
 use reqwest::{header::HeaderMap, Client};
-use serde::Deserialize;
 use std::error::Error;
-
-#[derive(Deserialize)]
-pub struct Expansion {
-    pub id: u32,
-    pub name: String,
-}
 
 pub async fn fetch_expansions(
     client: &Client,
@@ -32,20 +27,22 @@ pub async fn fetch_blueprints(
     expansion_id: u32,
     expansion_name: &String,
 ) -> Result<Vec<Blueprint>, Box<dyn Error>> {
-    let requets = client
-        .request(
-            reqwest::Method::GET,
-            format!(
-                "https://api.cardtrader.com/api/v2/blueprints/export?expansion_id={}",
-                expansion_id
-            ),
-        )
-        .headers(headers);
-    let response = requets.send().await?;
+    let url = format!(
+        "https://api.cardtrader.com/api/v2/blueprints/export?expansion_id={}",
+        expansion_id
+    );
+    let request = client.request(reqwest::Method::GET, &url).headers(headers);
+    let response = request.send().await?;
     let body = response.text().await?;
-    let blueprints: Vec<Blueprint> = serde_json::from_str(&body)
+    let blueprints_response: Vec<BlueprintApiResponse> = serde_json::from_str(&body)?;
+    println!(
+        "Fetched {} blueprints for {}",
+        blueprints_response.len(),
+        expansion_name
+    );
+    let blueprints: Vec<Blueprint> = blueprints_response
         .into_iter()
-        .map(|bp: Blueprint| Blueprint {
+        .map(|bp| Blueprint {
             id: bp.id,
             name: bp.name,
             version: bp.version,

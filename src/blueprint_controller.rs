@@ -1,5 +1,6 @@
 use crate::api;
 use crate::blueprint::BlueprintData;
+use crate::expansion::Expansion;
 use indicatif::ProgressBar;
 use reqwest::{header::HeaderMap, Client};
 use std::collections::HashSet;
@@ -10,7 +11,7 @@ use std::io::{BufReader, BufWriter};
 pub async fn save_all_blueprints_to_json(
     client: &Client,
     headers: &HeaderMap,
-    expansions: &Vec<api::Expansion>,
+    expansions: &Vec<Expansion>,
 ) -> Result<(), Box<dyn Error>> {
     let mut existing_blueprints = HashSet::new();
     let mut all_blueprints: Vec<BlueprintData> = Vec::new();

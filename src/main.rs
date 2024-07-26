@@ -5,6 +5,7 @@ mod blueprint_controller;
 mod cache;
 mod cards_controller;
 mod cardtrader_controller;
+mod expansion;
 
 use inquire::{InquireError, Select};
 use reqwest::Client;

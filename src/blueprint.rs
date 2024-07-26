@@ -17,3 +17,11 @@ pub struct BlueprintData {
     pub collector_number: String,
     pub expansion_name: String,
 }
+
+#[derive(Deserialize)]
+pub struct BlueprintApiResponse {
+    pub id: u32,
+    pub name: String,
+    pub version: Option<String>,
+    pub collector_number: Option<String>,
+}
