@@ -3,7 +3,7 @@ use reqwest::Client;
 use std::error::Error;
 use teloxide::prelude::*;
 use teloxide::types::{ChatId, ParseMode};
-
+use teloxide::Bot;
 pub async fn send_message(
     token: &str,
     chat_id: ChatId,

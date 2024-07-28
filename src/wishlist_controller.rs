@@ -1,14 +1,23 @@
 use crate::cardtrader_controller::fetch_card_price;
+use crate::cardtrader_controller::fetch_multiple_prices_fantoccini;
+use crate::error::CustomError;
 use crate::telegram;
 use dotenv::dotenv;
+use futures::future::join_all;
+use indicatif::ProgressBar;
 use serde::{Deserialize, Serialize};
 use std::env;
 use std::error::Error;
 use std::fs::{File, OpenOptions};
 use std::io::{BufReader, BufWriter, Error as IOError};
+use std::sync::Arc;
 use teloxide::types::ChatId;
+use tokio::sync::Semaphore;
+use tokio::task;
 
-#[derive(Serialize, Deserialize)]
+const MAX_CONCURRENT_CHECKS: usize = 10;
+
+#[derive(Serialize, Deserialize, Clone)]
 pub struct WishlistItem {
     pub card_name: String,
     pub expansion_name: String,
@@ -47,54 +56,90 @@ fn save_wishlist(wishlist: &Vec<WishlistItem>) -> Result<(), IOError> {
     Ok(())
 }
 
-pub async fn check_wishlist_prices() -> Result<(), Box<dyn Error>> {
+pub async fn check_wishlist_prices() -> Result<(), CustomError> {
     dotenv().ok();
-    let telegram_token = env::var("TELEGRAM_TOKEN").expect("TELEGRAM_TOKEN must be set");
+    let telegram_token =
+        env::var("TELEGRAM_TOKEN").map_err(|e| CustomError::new(&e.to_string()))?;
     let telegram_chat_id: i64 = env::var("TELEGRAM_CHAT_ID")
         .expect("TELEGRAM_CHAT_ID must be set")
         .parse()
         .expect("TELEGRAM_CHAT_ID must be a valid i64");
     let mut alert_messages = Vec::new();
 
-    let mut wishlist = load_wishlist()?;
-    for item in &mut wishlist {
-        println!(
-            "Checking price of {} ({}) [{}] - {}",
-            item.card_name, item.collector_number, item.expansion_name, item.version
-        );
-        let current_price =
-            fetch_card_price(&item.card_name, &item.expansion_name, &item.version).await?;
-        if current_price < item.price {
-            println!(
-                "Alert: The price of {} ({}) [{}] - {} has dropped from R$ {} to R$ {}",
-                item.card_name,
-                item.collector_number,
-                item.expansion_name,
-                item.version,
-                item.price,
-                current_price
-            );
-            let alert_message = format!(
-                "*{}*\nQueda: _R$ {:.2} \\({:.2}%\\)_\nPreço Atual: *R$ {}*",
-                escape_markdown(&item.card_name),
-                escape_markdown(&(item.price - current_price).to_string()),
-                escape_markdown(&(((item.price - current_price) / item.price) * 100.0).to_string()),
-                escape_markdown(&(current_price).to_string())
-            );
-            alert_messages.push(alert_message);
+    let mut wishlist = load_wishlist().map_err(|e| CustomError::new(&e.to_string()))?;
+    let semaphore = Arc::new(Semaphore::new(MAX_CONCURRENT_CHECKS));
+    let mut tasks = Vec::new();
 
-            item.price = current_price;
+    let pb = ProgressBar::new(wishlist.len() as u64);
+    for item in &mut wishlist {
+        let semaphore_clone = Arc::clone(&semaphore);
+        let item_clone = item.clone();
+
+        let pb_clone = pb.clone();
+        let task = task::spawn(async move {
+            let _permit = semaphore_clone.acquire().await.unwrap();
+            let current_price = fetch_card_price(
+                &item_clone.card_name,
+                &item_clone.expansion_name,
+                &item_clone.version,
+            )
+            .await
+            .map_err(|e| CustomError::new(&e.to_string()))?;
+
+            pb_clone.inc(1);
+            if current_price < item_clone.price {
+                let alert_message = format!(
+                    "*{} \\({}\\) \\[{}\\]*\nPreço Desejado: *R$ {}*\nPreço Atual: *R$ {}*",
+                    escape_markdown(&item_clone.card_name),
+                    escape_markdown(&item_clone.collector_number),
+                    escape_markdown(&item_clone.expansion_name),
+                    escape_markdown(&item_clone.price.to_string()),
+                    escape_markdown(&current_price.to_string())
+                );
+
+                Ok((item_clone, Some(alert_message)))
+                    as Result<(WishlistItem, Option<String>), CustomError>
+            } else {
+                Ok((item_clone, None)) as Result<(WishlistItem, Option<String>), CustomError>
+            }
+        });
+
+        tasks.push(task);
+    }
+
+    let results = join_all(tasks).await;
+
+    pb.finish_with_message("Finished checking prices");
+    for result in results {
+        match result {
+            Ok(Ok((item, Some(alert_message)))) => {
+                alert_messages.push(alert_message);
+                wishlist.iter_mut().for_each(|w_item| {
+                    if w_item.card_name == item.card_name
+                        && w_item.expansion_name == item.expansion_name
+                        && w_item.version == item.version
+                    {
+                        w_item.price = item.price;
+                    }
+                });
+            }
+            Ok(Ok((_item, None))) => {}
+            Ok(Err(e)) => return Err(e),
+            Err(e) => return Err(CustomError::new(&format!("Task failed: {}", e))),
         }
     }
+
     if !alert_messages.is_empty() {
         let chat_id = ChatId(telegram_chat_id);
         for chunk in split_message(&alert_messages.join("\n\n"), 4000) {
             let consolidated_message = format!("*Alerta de Preço Baixo\\!*\n\n{}", chunk);
-            telegram::send_message(&telegram_token, chat_id, &consolidated_message).await?;
+            telegram::send_message(&telegram_token, chat_id, &consolidated_message)
+                .await
+                .map_err(|e| CustomError::new(&e.to_string()))?;
         }
     }
 
-    save_wishlist(&wishlist)?;
+    save_wishlist(&wishlist).map_err(|e| CustomError::new(&e.to_string()))?;
     Ok(())
 }
 
@@ -139,4 +184,58 @@ pub async fn continuous_check_prices() -> Result<(), Box<dyn Error>> {
         check_wishlist_prices().await?;
         tokio::time::sleep(tokio::time::Duration::from_secs(10)).await;
     }
+}
+
+pub async fn sync_prices() -> Result<(), Box<dyn Error>> {
+    let mut wishlist = load_wishlist()?;
+    let mut urls = Vec::new();
+    for item in &mut wishlist {
+        let card_name = &item.card_name;
+        let expansion_name = &item.expansion_name;
+        let version = &item.version;
+
+        let clean_card_name = card_name
+            .replace(' ', "-")
+            .replace(",", "")
+            .replace("'", "-")
+            .replace(".", "")
+            .replace(":", "")
+            .to_lowercase();
+
+        let clean_expansion_name = expansion_name
+            .replace(' ', "-")
+            .replace(",", "")
+            .replace("'", "-")
+            .replace(".", "")
+            .replace(":", "")
+            .to_lowercase();
+
+        let clean_version = version
+            .replace(' ', "-")
+            .replace(",", "")
+            .replace("'", "-")
+            .replace(".", "")
+            .replace(":", "")
+            .to_lowercase();
+        let url = if item.version.is_empty() {
+            format!(
+                "https://www.cardtrader.com/cards/{}-{}",
+                clean_card_name, clean_expansion_name
+            )
+        } else {
+            format!(
+                "https://www.cardtrader.com/cards/{}-{}-{}",
+                clean_card_name, clean_version, clean_expansion_name
+            )
+        };
+        urls.push(url);
+    }
+    let prices = fetch_multiple_prices_fantoccini(urls).await?;
+
+    for (item, price) in wishlist.iter_mut().zip(prices.iter()) {
+        item.price = *price;
+    }
+
+    save_wishlist(&wishlist)?;
+    Ok(())
 }

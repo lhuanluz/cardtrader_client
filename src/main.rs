@@ -43,10 +43,11 @@ async fn main() -> Result<(), Box<dyn Error>> {
     // Menu interativo
     loop {
         let menu_options: Vec<&str> = vec![
-            "Save all blueprints",
             "Add card",
             "Check prices",
             "Continuos price check",
+            "Sync prices (Danger)",
+            "Save all blueprints (Danger)",
             "Exit",
         ];
         let menu_ans: Result<&str, InquireError> =
@@ -67,6 +68,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 "Add card" => cards_controller::list_and_select_cards(&blueprint_cache).await?,
                 "Check prices" => wishlist_controller::check_wishlist_prices().await?,
                 "Continuos price check" => wishlist_controller::continuous_check_prices().await?,
+                "Sync prices (Danger)" => wishlist_controller::sync_prices().await?,
                 "Exit" => break,
                 _ => println!("Invalid choice"),
             },
