@@ -1,5 +1,4 @@
 use crate::cardtrader_controller::fetch_card_price;
-use crate::cardtrader_controller::fetch_multiple_prices_fantoccini;
 use crate::error::CustomError;
 use crate::telegram;
 use dotenv::dotenv;
@@ -86,7 +85,9 @@ pub async fn check_wishlist_prices() -> Result<(), CustomError> {
             .map_err(|e| CustomError::new(&e.to_string()))?;
 
             pb_clone.inc(1);
-            if current_price < item_clone.price {
+            if current_price == 0.0 {
+                Ok((item_clone, None)) as Result<(WishlistItem, Option<String>), CustomError>
+            } else if current_price < item_clone.price {
                 let alert_message = format!(
                     "*{} \\({}\\) \\[{}\\]*\nPreço Desejado: *R$ {}*\nPreço Atual: *R$ {}*",
                     escape_markdown(&item_clone.card_name),
@@ -189,55 +190,59 @@ pub async fn continuous_check_prices() -> Result<(), Box<dyn Error>> {
 }
 
 pub async fn sync_prices() -> Result<(), Box<dyn Error>> {
-    let mut wishlist = load_wishlist()?;
-    let mut urls = Vec::new();
+    let mut wishlist = load_wishlist().map_err(|e| CustomError::new(&e.to_string()))?;
+    let semaphore = Arc::new(Semaphore::new(MAX_CONCURRENT_CHECKS));
+    let mut tasks = Vec::new();
+
+    let pb = ProgressBar::new(wishlist.len() as u64);
     for item in &mut wishlist {
-        let card_name = &item.card_name;
-        let expansion_name = &item.expansion_name;
-        let version = &item.version;
+        let semaphore_clone = Arc::clone(&semaphore);
+        let mut item_clone = item.clone();
 
-        let clean_card_name = card_name
-            .replace(' ', "-")
-            .replace(",", "")
-            .replace("'", "-")
-            .replace(".", "")
-            .replace(":", "")
-            .to_lowercase();
-
-        let clean_expansion_name = expansion_name
-            .replace(' ', "-")
-            .replace(",", "")
-            .replace("'", "-")
-            .replace(".", "")
-            .replace(":", "")
-            .to_lowercase();
-
-        let clean_version = version
-            .replace(' ', "-")
-            .replace(",", "")
-            .replace("'", "-")
-            .replace(".", "")
-            .replace(":", "")
-            .to_lowercase();
-        let url = if item.version.is_empty() {
-            format!(
-                "https://www.cardtrader.com/cards/{}-{}",
-                clean_card_name, clean_expansion_name
+        let pb_clone = pb.clone();
+        let task = task::spawn(async move {
+            let _permit = semaphore_clone.acquire().await.unwrap();
+            let current_price = fetch_card_price(
+                &item_clone.card_name,
+                &item_clone.expansion_name,
+                &item_clone.version,
             )
-        } else {
-            format!(
-                "https://www.cardtrader.com/cards/{}-{}-{}",
-                clean_card_name, clean_version, clean_expansion_name
-            )
-        };
-        urls.push(url);
-    }
-    let prices = fetch_multiple_prices_fantoccini(urls).await?;
+            .await
+            .map_err(|e| CustomError::new(&e.to_string()))?;
 
-    for (item, price) in wishlist.iter_mut().zip(prices.iter()) {
-        item.price = *price;
+            pb_clone.inc(1);
+            if current_price == 0.0 {
+                Ok(item_clone) as Result<WishlistItem, CustomError>
+            } else if current_price < item_clone.price {
+                item_clone.price = current_price; // Atualiza o preço do item
+                Ok(item_clone) as Result<WishlistItem, CustomError>
+            } else {
+                Ok(item_clone) as Result<WishlistItem, CustomError>
+            }
+        });
+
+        tasks.push(task);
     }
 
-    save_wishlist(&wishlist)?;
+    let results = join_all(tasks).await;
+
+    for result in results {
+        match result {
+            Ok(Ok(item)) => {
+                // Atualiza o preço do item na wishlist original
+                if let Some(wishlist_item) = wishlist.iter_mut().find(|i| {
+                    i.card_name == item.card_name
+                        && i.expansion_name == item.expansion_name
+                        && i.version == item.version
+                }) {
+                    wishlist_item.price = item.price;
+                }
+            }
+            Ok(Err(e)) => return Err(e.into()),
+            Err(e) => return Err(e.into()),
+        }
+    }
+
+    save_wishlist(&wishlist).map_err(|e| CustomError::new(&e.to_string()))?;
     Ok(())
 }
