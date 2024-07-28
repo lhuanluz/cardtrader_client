@@ -28,7 +28,6 @@ pub struct WishlistItem {
 
 pub fn add_to_wishlist(item: WishlistItem) -> Result<(), IOError> {
     let mut wishlist = load_wishlist()?;
-    println!("Adding {} to wishlist", item.card_name);
     wishlist.push(item);
     save_wishlist(&wishlist)
 }
@@ -73,7 +72,7 @@ pub async fn check_wishlist_prices() -> Result<(), CustomError> {
     let pb = ProgressBar::new(wishlist.len() as u64);
     for item in &mut wishlist {
         let semaphore_clone = Arc::clone(&semaphore);
-        let item_clone = item.clone();
+        let mut item_clone = item.clone();
 
         let pb_clone = pb.clone();
         let task = task::spawn(async move {
@@ -97,6 +96,8 @@ pub async fn check_wishlist_prices() -> Result<(), CustomError> {
                     escape_markdown(&current_price.to_string())
                 );
 
+                item_clone.price = current_price; // Atualiza o preço do item
+
                 Ok((item_clone, Some(alert_message)))
                     as Result<(WishlistItem, Option<String>), CustomError>
             } else {
@@ -114,14 +115,15 @@ pub async fn check_wishlist_prices() -> Result<(), CustomError> {
         match result {
             Ok(Ok((item, Some(alert_message)))) => {
                 alert_messages.push(alert_message);
-                wishlist.iter_mut().for_each(|w_item| {
-                    if w_item.card_name == item.card_name
-                        && w_item.expansion_name == item.expansion_name
-                        && w_item.version == item.version
-                    {
-                        w_item.price = item.price;
-                    }
-                });
+
+                // Atualiza o preço do item na wishlist original
+                if let Some(wishlist_item) = wishlist.iter_mut().find(|i| {
+                    i.card_name == item.card_name
+                        && i.expansion_name == item.expansion_name
+                        && i.version == item.version
+                }) {
+                    wishlist_item.price = item.price;
+                }
             }
             Ok(Ok((_item, None))) => {}
             Ok(Err(e)) => return Err(e),
