@@ -40,6 +40,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let user_name = whoami::username();
     println!("Hello, {}! Welcome to CardTrader!", user_name);
 
+    tokio::spawn(async {
+        telegram::run().await;
+    });
+
     // Menu interativo
     loop {
         let menu_options: Vec<&str> = vec![
@@ -48,6 +52,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
             "Continuos price check",
             "Sync prices (Danger)",
             "Save all blueprints (Danger)",
+            "Check with fantoccini",
             "Exit",
         ];
         let menu_ans: Result<&str, InquireError> =
@@ -69,6 +74,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 "Check prices" => wishlist_controller::check_wishlist_prices().await?,
                 "Continuos price check" => wishlist_controller::continuous_check_prices().await?,
                 "Sync prices (Danger)" => wishlist_controller::sync_prices().await?,
+                "Check with fantoccini" => {
+                    cardtrader_controller::check_prices_with_fantoccini().await?
+                }
                 "Exit" => break,
                 _ => println!("Invalid choice"),
             },

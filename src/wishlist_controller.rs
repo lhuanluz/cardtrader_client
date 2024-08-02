@@ -14,7 +14,7 @@ use teloxide::types::ChatId;
 use tokio::sync::Semaphore;
 use tokio::task;
 
-const MAX_CONCURRENT_CHECKS: usize = 10;
+const MAX_CONCURRENT_CHECKS: usize = 15;
 
 #[derive(Serialize, Deserialize, Clone)]
 pub struct WishlistItem {
